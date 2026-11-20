@@ -35,7 +35,7 @@ th,td{padding:9px;text-align:left;border-bottom:1px solid #eee}
 <input id="evName" placeholder="Event Name e.g. Calvin & Amina Wedding">
 <div class="row"><input id="evDate" type="date"><input id="evPlace" placeholder="Place e.g. Kampala Serena"></div>
 <textarea id="evDesc" placeholder="Description"></textarea>
-<button class="btn" onclick="createEvent()">+ Create Event</button>
+<button class="btn" onclick="createNewEvent()">+ Create Event</button>
 <div id="evMsg" class="success"></div>
 <h3 style="margin-top:18px">Your Events</h3>
 <div id="eventsList"><p class="muted">Loading...</p></div>
@@ -63,20 +63,24 @@ const SUPABASE_KEY = "sb_publishable_tFwukIVI5jauIgFOUV_Kww_c-MeudES";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let events = []; let guests = [];
 async function loadAll(){
-  let e = await supabaseClient.from('events').select('*').order('created_at',{ascending:false});
-  let g = await supabaseClient.from('guests').select('*').order('created_at',{ascending:false});
-  events = e.data || []; guests = g.data || [];
-  renderEvents(); renderGuests();
+  try {
+    let e = await supabaseClient.from('events').select('*').order('created_at',{ascending:false});
+    let g = await supabaseClient.from('guests').select('*').order('created_at',{ascending:false});
+    if(e.error) console.log('Events error:', e.error);
+    if(g.error) console.log('Guests error:', g.error);
+    events = e.data || []; guests = g.data || [];
+    renderEvents(); renderGuests();
+  } catch(err){ console.log('Load error:', err); document.getElementById('eventsList').innerHTML='<p style="color:red">Cannot connect to Supabase. Check URL / Key. Open Console (F12) for details.</p>'; }
 }
-async function createEvent(){
+async function createNewEvent(){
   let name=document.getElementById('evName').value.trim();
   let date=document.getElementById('evDate').value;
   let place=document.getElementById('evPlace').value.trim();
   let desc=document.getElementById('evDesc').value.trim();
   if(!name){alert('Please enter Event Name');return;}
   if(!date){alert('Please pick a date');return;}
-  let {error}=await supabaseClient.from('events').insert([{name,date,place,description:desc}]);
-  if(error){alert('Error: '+error.message);return;}
+  let {data,error}=await supabaseClient.from('events').insert([{name,date,place,description:desc}]).select();
+  if(error){alert('Error: '+error.message);console.log(error);return;}
   document.getElementById('evName').value='';document.getElementById('evPlace').value='';document.getElementById('evDesc').value='';
   let m=document.getElementById('evMsg');m.style.display='block';m.textContent='✅ Event created: '+name;
   setTimeout(()=>m.style.display='none',3000); loadAll();
