@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roland-System Events</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;font-family:Arial,sans-serif}
+body{margin:0;background:#f3efe6}
+header{background:#111827;color:white;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
+header b{font-size:20px}
+header span{color:#fbbf24}
+.wrap{max-width:900px;margin:0 auto;padding:16px}
+.card{background:white;border-radius:12px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+h2{margin:0 0 12px;font-size:18px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:15px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.btn{background:#111827;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;width:100%;font-size:15px}
+.btn-yellow{background:#fbbf24;color:#111827}
+.btn-small{padding:7px 10px;width:auto;font-size:13px}
+.event{border:1px solid #eee;border-radius:10px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;gap:10px}
+.badge{background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:20px;font-size:12px;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:9px;text-align:left;border-bottom:1px solid #eee}
+.success{background:#dcfce7;padding:12px;border-radius:8px;margin-top:10px;font-weight:bold;display:none}
+.muted{color:#666;font-size:13px}
+</style>
+</head>
+<body>
+<header><b>💍 Roland-System <span>Events</span></b><span>● Live - Supabase Connected</span></header>
+<div class="wrap">
+<div class="card">
+<h2>1. Create New Event</h2>
+<input id="evName" placeholder="Event Name e.g. Calvin & Amina Wedding">
+<div class="row"><input id="evDate" type="date"><input id="evPlace" placeholder="Place e.g. Kampala Serena"></div>
+<textarea id="evDesc" placeholder="Description"></textarea>
+<button class="btn" onclick="createEvent()">+ Create Event</button>
+<div id="evMsg" class="success"></div>
+<h3 style="margin-top:18px">Your Events</h3>
+<div id="eventsList"><p class="muted">Loading...</p></div>
+</div>
+<div class="card" style="background:#111827;color:white">
+<h2>2. Guest RSVP</h2>
+<select id="rsvpEvent"><option value="">Select Event...</option></select>
+<input id="gName" placeholder="Full Name">
+<div class="row"><input id="gPhone" placeholder="Phone / WhatsApp"><input id="gCount" type="number" value="1" min="1"></div>
+<select id="gAttend"><option value="Yes">Yes, I will attend</option><option value="No">No, I can't attend</option><option value="Maybe">Maybe</option></select>
+<button class="btn btn-yellow" onclick="sendRSVP()">Send RSVP - Get My Code</button>
+<div id="rsvpMsg" class="success" style="color:#111827"></div>
+</div>
+<div class="card">
+<h2>3. Guest List & Check-In (Admin)</h2>
+<div class="row"><select id="filterEvent" onchange="renderGuests()"><option value="all">All Events</option></select><input id="searchGuest" placeholder="Search name / code..." oninput="renderGuests()"></div>
+<button class="btn btn-small" onclick="loadAll()">↻ Refresh</button>
+<div style="overflow:auto;margin-top:10px"><table><thead><tr><th>Name</th><th>Event</th><th>Code</th><th>Attending</th><th>Status</th><th>Action</th></tr></thead><tbody id="guestBody"></tbody></table></div>
+<p id="guestCount" class="muted"></p>
+</div>
+</div>
+<script>
+const SUPABASE_URL = "https://yakegctebdenljqhzas.supabase.co";
+const SUPABASE_KEY = "sb_publishable_tFwukIVI5jauIgFOUV_Kww_c-MeudES";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let events = []; let guests = [];
+async function loadAll(){
+  let e = await supabaseClient.from('events').select('*').order('created_at',{ascending:false});
+  let g = await supabaseClient.from('guests').select('*').order('created_at',{ascending:false});
+  events = e.data || []; guests = g.data || [];
+  renderEvents(); renderGuests();
+}
+async function createEvent(){
+  let name=document.getElementById('evName').value.trim();
+  let date=document.getElementById('evDate').value;
+  let place=document.getElementById('evPlace').value.trim();
+  let desc=document.getElementById('evDesc').value.trim();
+  if(!name){alert('Please enter Event Name');return;}
+  if(!date){alert('Please pick a date');return;}
+  let {error}=await supabaseClient.from('events').insert([{name,date,place,description:desc}]);
+  if(error){alert('Error: '+error.message);return;}
+  document.getElementById('evName').value='';document.getElementById('evPlace').value='';document.getElementById('evDesc').value='';
+  let m=document.getElementById('evMsg');m.style.display='block';m.textContent='✅ Event created: '+name;
+  setTimeout(()=>m.style.display='none',3000); loadAll();
+}
+function renderEvents(){
+  let box=document.getElementById('eventsList');
+  let rsvp=document.getElementById('rsvpEvent');
+  let filt=document.getElementById('filterEvent');
+  rsvp.innerHTML='<option value="">Select Event...</option>';
+  filt.innerHTML='<option value="all">All Events</option>';
+  if(events.length===0){box.innerHTML='<p class="muted">No events yet. Create one above.</p>';return;}
+  box.innerHTML='';
+  events.forEach(ev=>{
+    let count=guests.filter(g=>g.event_id===ev.id).length;
+    box.innerHTML+=`<div class="event"><div><b>${ev.name}</b><br><span class="muted">${ev.date||''} • ${ev.place||''} • ${ev.description||''}</span><br><span class="badge">${count} Guests RSVP'd</span></div><button class="btn btn-small" style="background:#dc2626" onclick="deleteEvent('${ev.id}')">Delete</button></div>`;
+    rsvp.innerHTML+=`<option value="${ev.id}">${ev.name} - ${ev.date||''}</option>`;
+    filt.innerHTML+=`<option value="${ev.id}">${ev.name}</option>`;
+  });
+}
+async function deleteEvent(id){
+  if(!confirm('Delete this event?'))return;
+  await supabaseClient.from('events').delete().eq('id',id); loadAll();
+}
+async function sendRSVP(){
+  let eventId=document.getElementById('rsvpEvent').value;
+  let name=document.getElementById('gName').value.trim();
+  let phone=document.getElementById('gPhone').value.trim();
+  let count=parseInt(document.getElementById('gCount').value||1);
+  let attend=document.getElementById('gAttend').value;
+  if(!eventId){alert('Please select an event first');return;}
+  if(!name){alert('Please enter your full name');return;}
+  let ev=events.find(e=>e.id===eventId);
+  let code='RS-'+Math.floor(1000+Math.random()*9000);
+  let {error}=await supabaseClient.from('guests').insert([{event_id:eventId,name,phone,guests_count:count,attending:attend,code,checked_in:false}]);
+  if(error){alert('Error: '+error.message);return;}
+  document.getElementById('gName').value='';document.getElementById('gPhone').value='';
+  let m=document.getElementById('rsvpMsg');m.style.display='block';m.innerHTML=`✅ Thank you ${name}! Your code is <b style="font-size:22px">${code}</b><br>Show this code at the entrance for ${ev.name}. Screenshot it!`;
+  loadAll();
+}
+async function toggleCheck(id,current){
+  await supabaseClient.from('guests').update({checked_in:!current}).eq('id',id); loadAll();
+}
+function renderGuests(){
+  let filt=document.getElementById('filterEvent').value;
+  let search=(document.getElementById('searchGuest').value||'').toLowerCase();
+  let list=guests.filter(g=>(filt==='all'||g.event_id===filt)&&((g.name||'').toLowerCase().includes(search)||(g.code||'').toLowerCase().includes(search)));
+  let body=document.getElementById('guestBody');
+  document.getElementById('guestCount').textContent=`Showing ${list.length} of ${guests.length} guests • ${guests.filter(g=>g.checked_in).length} Checked-In`;
+  if(list.length===0){body.innerHTML='<tr><td colspan="6">No guests yet. Try RSVP above.</td></tr>';return;}
+  body.innerHTML='';
+  list.forEach(g=>{
+    let evName=(events.find(e=>e.id===g.event_id)||{}).name||'';
+    body.innerHTML+=`<tr><td><b>${g.name}</b><br><small>${g.phone||''} • ${g.guests_count} person(s)</small></td><td>${evName}</td><td><b>${g.code}</b></td><td>${g.attending}</td><td>${g.checked_in?'✅ Checked-In':'⏳ Waiting'}</td><td><button class="btn btn-small" onclick="toggleCheck('${g.id}',${g.checked_in})">${g.checked_in?'Undo':'Check-In'}</button></td></tr>`;
+  });
+}
+loadAll();
+</script>
+</body>
+</html>
